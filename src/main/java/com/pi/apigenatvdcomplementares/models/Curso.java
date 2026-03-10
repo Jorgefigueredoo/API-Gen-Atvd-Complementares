@@ -1,0 +1,5 @@
+package com.pi.apigenatvdcomplementares.models;
+
+public class Curso {
+    
+}
