@@ -16,4 +16,12 @@ public interface SubmissaoRepository extends JpaRepository<Submissao, Long> {
 
     List<Submissao> findByStatus(StatusSubmissao pendente); // Método para encontrar todas as submissões com um status específico
 
+    // Histórico — filtra pelo usuário responsável (aluno) usando o id do usuário
+    List<Submissao> findAllByAlunoUsuarioIdOrderByDataSubmissaoDesc(Long usuarioId);
+
+    // Histórico — filtra pelas submissões avaliadas por um coordenador
+    List<Submissao> findAllByCoordenadorIdOrderByDataSubmissaoDesc(Long coordenadorId);
+
+    // Histórico — listagem completa ordenada (perfil SUPER_ADMIN)
+    List<Submissao> findAllByOrderByDataSubmissaoDesc();
 }
