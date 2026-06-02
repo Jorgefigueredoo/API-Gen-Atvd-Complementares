@@ -5,6 +5,7 @@ import java.util.HashSet;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
 import com.pi.apigenatvdcomplementares.enums.PerfilUsuario;
@@ -13,12 +14,16 @@ import com.pi.apigenatvdcomplementares.models.Certificado;
 import com.pi.apigenatvdcomplementares.models.Submissao;
 import com.pi.apigenatvdcomplementares.models.Usuario;
 import com.pi.apigenatvdcomplementares.repository.SubmissaoRepository;
+import com.pi.apigenatvdcomplementares.repository.UsuarioRepository;
 
 @Service
 public class SubmissaoService {
 
     @Autowired
     private SubmissaoRepository submissaoRepository;
+
+    @Autowired
+    private UsuarioRepository usuarioRepository;
 
     public Submissao criarSubmissao(Submissao submissao) {
 
@@ -103,5 +108,60 @@ public class SubmissaoService {
         }
 
         submissaoRepository.delete(submissaoExistente);
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // Histórico de Submissões — listagem e detalhe por usuário logado
+    // ────────────────────────────────────────────────────────────────
+
+    /**
+     * Retorna o histórico de submissões visível para o usuário autenticado.
+     *
+     * Regras de visibilidade (isolamento por usuário):
+     *  - ALUNO        → apenas as próprias submissões;
+     *  - COORDENADOR  → submissões que avaliou (campo coordenador);
+     *  - SUPER_ADMIN  → todas as submissões.
+     *
+     * Em todos os casos a lista é ordenada por dataSubmissao DESC.
+     */
+    public List<Submissao> listarHistoricoDoUsuario(String email) {
+        Usuario usuario = buscarUsuarioOuFalhar(email);
+
+        return switch (usuario.getPerfil()) {
+            case ALUNO -> submissaoRepository
+                    .findAllByAlunoUsuarioIdOrderByDataSubmissaoDesc(usuario.getId());
+            case COORDENADOR -> submissaoRepository
+                    .findAllByCoordenadorIdOrderByDataSubmissaoDesc(usuario.getId());
+            case SUPER_ADMIN -> submissaoRepository.findAllByOrderByDataSubmissaoDesc();
+        };
+    }
+
+    /**
+     * Retorna o detalhe de uma submissão garantindo que o usuário autenticado
+     * tem permissão para visualizá-la.
+     */
+    public Submissao buscarHistoricoPorId(Long id, String email) {
+        Usuario usuario = buscarUsuarioOuFalhar(email);
+        Submissao submissao = buscarPorId(id);
+
+        boolean autorizado = switch (usuario.getPerfil()) {
+            case SUPER_ADMIN -> true;
+            case COORDENADOR -> submissao.getCoordenador() != null
+                    && submissao.getCoordenador().getId().equals(usuario.getId());
+            case ALUNO -> submissao.getAluno() != null
+                    && usuario.getId().equals(submissao.getAluno().getUsuarioId());
+        };
+
+        if (!autorizado) {
+            throw new AccessDeniedException(
+                    "Você não tem permissão para visualizar esta submissão.");
+        }
+
+        return submissao;
+    }
+
+    private Usuario buscarUsuarioOuFalhar(String email) {
+        return usuarioRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Usuário não encontrado: " + email));
     }
 }
